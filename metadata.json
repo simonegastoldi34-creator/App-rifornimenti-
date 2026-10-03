@@ -1,0 +1,6 @@
+{
+  "name": "Rifornimenti Auto",
+  "description": "Traccia i rifornimenti della tua auto: km percorsi, autonomia residua, consumo medio, prezzo carburante e costi totali.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
