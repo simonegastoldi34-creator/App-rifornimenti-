@@ -90,4 +90,20 @@ class ExampleRobolectricTest {
     assertFalse(tagliandoPast.isExpired) // completed so not flagged as expired
     assertEquals("Completato", tagliandoPast.statusLabel())
   }
+
+  @Test
+  fun `test notification scheduling and channel creation`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    com.example.notifications.NotificationHelper.createNotificationChannel(context)
+
+    val reminder = VehicleReminder(
+      id = 42,
+      title = "Assicurazione",
+      type = ReminderType.ASSICURAZIONE,
+      dueDateTimestamp = System.currentTimeMillis() + 86400000L * 65 // 65 days in future
+    )
+    // Scheduling should run without throwing any exceptions
+    com.example.notifications.NotificationHelper.scheduleReminderNotifications(context, reminder)
+    com.example.notifications.NotificationHelper.cancelReminderNotifications(context, 42)
+  }
 }

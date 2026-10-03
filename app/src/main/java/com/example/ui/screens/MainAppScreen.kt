@@ -324,7 +324,9 @@ fun MainAppScreen(
               },
               onDeleteReminder = { reminder -> viewModel.deleteReminder(reminder) },
               onToggleCompleted = { reminder -> viewModel.toggleReminderCompleted(reminder) },
-              onRenewForOneYear = { reminder -> viewModel.renewReminderForOneYear(reminder) }
+              onRenewForOneYear = { reminder -> viewModel.renewReminderForOneYear(reminder) },
+              onSendTestNotification = { viewModel.sendTestNotification() },
+              onRescheduleAll = { viewModel.rescheduleAllActiveReminders() }
             )
 
             AppDestination.CALCULATOR -> TripCalculatorScreen(

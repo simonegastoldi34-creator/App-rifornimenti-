@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -60,10 +65,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.data.ReminderType
 import com.example.data.VehicleReminder
 import com.example.ui.theme.AmberAccent
@@ -81,10 +88,32 @@ fun RemindersScreen(
   onDeleteReminder: (VehicleReminder) -> Unit,
   onToggleCompleted: (VehicleReminder) -> Unit,
   onRenewForOneYear: (VehicleReminder) -> Unit,
+  onSendTestNotification: () -> Unit,
+  onRescheduleAll: () -> Unit,
   modifier: Modifier = Modifier
 ) {
+  val context = LocalContext.current
   var selectedFilter by remember { mutableStateOf("Tutte") }
   var reminderToDelete by remember { mutableStateOf<VehicleReminder?>(null) }
+
+  var hasNotificationPermission by remember {
+    mutableStateOf(
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+      } else {
+        true
+      }
+    )
+  }
+
+  val permissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission()
+  ) { isGranted ->
+    hasNotificationPermission = isGranted
+    if (isGranted) {
+      onRescheduleAll()
+    }
+  }
 
   val activeReminders = reminders.filter { !it.isCompleted }
   val completedReminders = reminders.filter { it.isCompleted }
@@ -190,6 +219,71 @@ fun RemindersScreen(
       }
     }
 
+    // Notification Info & Test Banner
+    Surface(
+      shape = RoundedCornerShape(14.dp),
+      color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+      border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 4.dp)
+        .testTag("notification_status_card")
+    ) {
+      Row(
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+      ) {
+        Row(
+          modifier = Modifier.weight(1f),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Icon(
+            imageVector = Icons.Default.NotificationsActive,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+          )
+          Spacer(modifier = Modifier.width(10.dp))
+          Column {
+            Text(
+              text = "Notifiche Scadenze (2 e 1 mese prima)",
+              style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+              text = if (hasNotificationPermission)
+                "Avvisi programmati automaticamente per ogni scadenza"
+              else
+                "Tocca per autorizzare l'invio delle notifiche sul telefono",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        }
+
+        if (!hasNotificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          Button(
+            onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.height(32.dp).testTag("grant_notification_permission_button")
+          ) {
+            Text("Abilita", fontSize = 11.sp)
+          }
+        } else {
+          OutlinedButton(
+            onClick = onSendTestNotification,
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.height(32.dp).testTag("test_notification_button")
+          ) {
+            Text("Test Notifica", fontSize = 11.sp)
+          }
+        }
+      }
+    }
+
     // Filter Chips
     Row(
       modifier = Modifier
@@ -246,7 +340,7 @@ fun RemindersScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-          text = "Memorizza la scadenza del bollo, della polizza assicurativa, la data dell'ultimo tagliando effettuato o la revisione per non dimenticare nulla.",
+          text = "Memorizza la scadenza del bollo, della polizza assicurativa, la data dell'ultimo tagliando effettuato o la revisione per ricevere avvisi automatici 2 mesi e 1 mese prima.",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -309,7 +403,7 @@ fun RemindersScreen(
     AlertDialog(
       onDismissRequest = { reminderToDelete = null },
       title = { Text("Eliminare promemoria?") },
-      text = { Text("Vuoi davvero rimuovere \"${rem.title}\"?") },
+      text = { Text("Vuoi davvero rimuovere \"${rem.title}\"? Tutte le relative notifiche programmate verranno annullate.") },
       confirmButton = {
         TextButton(
           onClick = {
@@ -437,6 +531,25 @@ private fun ReminderCard(
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (!reminder.isCompleted) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 2.dp)
+              ) {
+                Icon(
+                  imageVector = Icons.Default.NotificationsActive,
+                  contentDescription = null,
+                  tint = CyanAccent,
+                  modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  text = "Avvisi: 2 mesi e 1 mese prima",
+                  style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                  color = CyanAccent
+                )
+              }
+            }
           }
         }
 

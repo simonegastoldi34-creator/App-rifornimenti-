@@ -12,11 +12,13 @@ import com.example.data.RefuelRepository
 import com.example.data.ReminderRepository
 import com.example.data.ReminderType
 import com.example.data.VehicleReminder
+import com.example.notifications.NotificationHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
@@ -289,21 +291,30 @@ class RefuelViewModel(application: Application) : AndroidViewModel(application) 
   // --- Reminder Operations ---
   fun saveReminder(reminder: VehicleReminder, onComplete: () -> Unit) {
     viewModelScope.launch {
-      if (reminder.id > 0) {
+      val savedId = if (reminder.id > 0) {
         reminderRepository.update(reminder)
-        _toastMessage.value = "Scadenza aggiornata"
+        reminder.id
       } else {
         reminderRepository.insert(reminder)
-        _toastMessage.value = "Scadenza memorizzata"
       }
+      val toSchedule = reminder.copy(id = savedId)
+      NotificationHelper.scheduleReminderNotifications(getApplication(), toSchedule)
+      _toastMessage.value = "Scadenza salvata: avvisi programmati (1 e 2 mesi prima)"
       onComplete()
     }
   }
 
   fun toggleReminderCompleted(reminder: VehicleReminder) {
     viewModelScope.launch {
-      reminderRepository.update(reminder.copy(isCompleted = !reminder.isCompleted))
-      _toastMessage.value = if (!reminder.isCompleted) "Scadenza contrassegnata come completata" else "Scadenza riattivata"
+      val updated = reminder.copy(isCompleted = !reminder.isCompleted)
+      reminderRepository.update(updated)
+      if (updated.isCompleted) {
+        NotificationHelper.cancelReminderNotifications(getApplication(), reminder.id)
+        _toastMessage.value = "Scadenza completata: notifiche disattivate"
+      } else {
+        NotificationHelper.scheduleReminderNotifications(getApplication(), updated)
+        _toastMessage.value = "Scadenza riattivata: avvisi programmati"
+      }
     }
   }
 
@@ -312,20 +323,35 @@ class RefuelViewModel(application: Application) : AndroidViewModel(application) 
       val cal = Calendar.getInstance()
       cal.timeInMillis = reminder.dueDateTimestamp
       cal.add(Calendar.YEAR, 1)
-      reminderRepository.update(
-        reminder.copy(
-          dueDateTimestamp = cal.timeInMillis,
-          isCompleted = false
-        )
+      val renewed = reminder.copy(
+        dueDateTimestamp = cal.timeInMillis,
+        isCompleted = false
       )
-      _toastMessage.value = "Scadenza rinnovata di 1 anno (+1 anno)"
+      reminderRepository.update(renewed)
+      NotificationHelper.scheduleReminderNotifications(getApplication(), renewed)
+      _toastMessage.value = "Scadenza rinnovata (+1 anno) e notifiche aggiornate"
     }
   }
 
   fun deleteReminder(reminder: VehicleReminder) {
     viewModelScope.launch {
       reminderRepository.delete(reminder)
+      NotificationHelper.cancelReminderNotifications(getApplication(), reminder.id)
       _toastMessage.value = "Promemoria eliminato"
+    }
+  }
+
+  fun sendTestNotification() {
+    NotificationHelper.showInstantTestNotification(getApplication())
+    _toastMessage.value = "Notifica di test inviata! Controlla l'area notifiche."
+  }
+
+  fun rescheduleAllActiveReminders() {
+    viewModelScope.launch {
+      val list = reminderRepository.allReminders.first()
+      for (r in list.filter { !it.isCompleted }) {
+        NotificationHelper.scheduleReminderNotifications(getApplication(), r)
+      }
     }
   }
 
@@ -368,11 +394,16 @@ class RefuelViewModel(application: Application) : AndroidViewModel(application) 
         notes = "Revisione periodica biennale"
       )
 
-      reminderRepository.insert(bollo)
-      reminderRepository.insert(assicurazione)
+      val id1 = reminderRepository.insert(bollo)
+      val id2 = reminderRepository.insert(assicurazione)
       reminderRepository.insert(tagliando)
-      reminderRepository.insert(revisione)
-      _toastMessage.value = "Aggiunte le scadenze e manutenzioni standard"
+      val id4 = reminderRepository.insert(revisione)
+
+      NotificationHelper.scheduleReminderNotifications(getApplication(), bollo.copy(id = id1))
+      NotificationHelper.scheduleReminderNotifications(getApplication(), assicurazione.copy(id = id2))
+      NotificationHelper.scheduleReminderNotifications(getApplication(), revisione.copy(id = id4))
+
+      _toastMessage.value = "Aggiunte le scadenze standard con notifiche attive"
     }
   }
 }

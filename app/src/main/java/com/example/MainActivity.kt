@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.example.notifications.NotificationHelper
 import com.example.ui.RefuelViewModel
 import com.example.ui.screens.MainAppScreen
 import com.example.ui.theme.MyApplicationTheme
@@ -19,6 +20,7 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    NotificationHelper.createNotificationChannel(this)
     setContent {
       MyApplicationTheme {
         Surface(
