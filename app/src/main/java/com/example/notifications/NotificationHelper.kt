@@ -16,6 +16,7 @@ object NotificationHelper {
   const val CHANNEL_ID = "scadenze_veicolo"
   private const val CHANNEL_NAME = "Scadenze veicolo"
   private const val CHANNEL_DESC = "Avvisi per bollo, assicurazione, revisione e altre scadenze"
+  private const val TEST_NOTIFICATION_ID = 999999
 
   fun createNotificationChannel(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -38,7 +39,7 @@ object NotificationHelper {
   /** Programma gli avvisi per una scadenza: uno due mesi prima e uno un mese prima. */
   fun scheduleReminderNotifications(context: Context, reminder: VehicleReminder) {
     if (reminder.isCompleted) {
-      cancelReminderNotifications(context, reminder)
+      cancelReminderNotifications(context, reminder.id)
       return
     }
     val now = System.currentTimeMillis()
@@ -47,42 +48,44 @@ object NotificationHelper {
     val twoMonthsBefore = monthsBefore(reminder.dueDateTimestamp, 2)
     if (twoMonthsBefore > now) {
       schedule(
-        context, reminder,
-        offsetCode = 1,
-        triggerAt = twoMonthsBefore,
-        message = "Tra due mesi: $label."
+        context, reminder.id, offsetCode = 1, triggerAt = twoMonthsBefore,
+        title = reminder.title, message = "Tra due mesi: $label."
       )
     }
 
     val oneMonthBefore = monthsBefore(reminder.dueDateTimestamp, 1)
     if (oneMonthBefore > now) {
       schedule(
-        context, reminder,
-        offsetCode = 2,
-        triggerAt = oneMonthBefore,
-        message = "Tra un mese: $label."
+        context, reminder.id, offsetCode = 2, triggerAt = oneMonthBefore,
+        title = reminder.title, message = "Tra un mese: $label."
       )
     }
   }
 
   fun cancelReminderNotifications(context: Context, reminder: VehicleReminder) {
+    cancelReminderNotifications(context, reminder.id)
+  }
+
+  fun cancelReminderNotifications(context: Context, reminderId: Long) {
     val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     listOf(1, 2).forEach { offsetCode ->
-      val pendingIntent = buildPendingIntent(context, reminder, offsetCode, create = false)
+      val pendingIntent = buildPendingIntent(context, reminderId, offsetCode, create = false)
       pendingIntent?.let { alarmManager.cancel(it) }
     }
   }
 
   private fun schedule(
     context: Context,
-    reminder: VehicleReminder,
+    reminderId: Long,
     offsetCode: Int,
     triggerAt: Long,
+    title: String,
     message: String
   ) {
     val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    val pendingIntent = buildPendingIntent(context, reminder, offsetCode, create = true, message = message)
-      ?: return
+    val pendingIntent = buildPendingIntent(
+      context, reminderId, offsetCode, create = true, title = title, message = message
+    ) ?: return
 
     val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
     try {
@@ -98,15 +101,16 @@ object NotificationHelper {
 
   private fun buildPendingIntent(
     context: Context,
-    reminder: VehicleReminder,
+    reminderId: Long,
     offsetCode: Int,
     create: Boolean,
+    title: String = "Scadenza Veicolo",
     message: String = ""
   ): PendingIntent? {
-    val requestCode = (reminder.id.toInt() * 10) + offsetCode
+    val requestCode = (reminderId.toInt() * 10) + offsetCode
     val intent = Intent(context, ReminderNotificationReceiver::class.java).apply {
       putExtra("NOTIFICATION_ID", requestCode)
-      putExtra("TITLE", reminder.title)
+      putExtra("TITLE", title)
       putExtra("MESSAGE", message)
     }
     val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE or
@@ -127,5 +131,15 @@ object NotificationHelper {
     } catch (e: SecurityException) {
       // Permesso notifiche non concesso
     }
+  }
+
+  /** Mostra subito una notifica di prova, usata dal pulsante "Invia notifica di test". */
+  fun showInstantTestNotification(context: Context) {
+    showNotification(
+      context,
+      TEST_NOTIFICATION_ID,
+      "Notifica di prova",
+      "Se vedi questo avviso, le notifiche funzionano correttamente."
+    )
   }
 }
