@@ -1,0 +1,9 @@
+
+    - name: Compila APK Debug
+      run: ./gradlew assembleDebug
+
+    - name: Salva l'APK come Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs
